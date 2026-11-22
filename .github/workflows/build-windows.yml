@@ -1,0 +1,68 @@
+name: Cross-platform tests and Windows build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Windows packaging mode
+        type: choice
+        default: onedir
+        options:
+          - onedir
+          - onefile
+
+permissions:
+  contents: read
+
+env:
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  test-linux:
+    name: Tests on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run tests headlessly
+        run: python -m pytest
+
+  build-windows:
+    name: Tests and native Windows build
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      HASHFORGE_ONEFILE: ${{ inputs.mode == 'onefile' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Run tests headlessly
+        run: python -m pytest
+      - name: Build using the native Windows toolchain
+        run: python -m PyInstaller --noconfirm --clean hashforge.spec
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: HashForge-windows-${{ inputs.mode || 'onedir' }}
+          path: |
+            dist/HashForge.exe
+            dist/HashForge/**
+          if-no-files-found: error
+          retention-days: 14
